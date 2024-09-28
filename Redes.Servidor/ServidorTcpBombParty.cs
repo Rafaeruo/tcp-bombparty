@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using Redes.Servidor.domain;
+using Redes.Servidor.helps;
 
 namespace Redes.Servidor;
 
@@ -29,11 +30,11 @@ public class ServidorTcpBombParty
             _jogadores.TryAdd(clientId, client);
             Console.WriteLine($"Jogador {clientId} abriu conexão");
 
-            _ = Task.Run(() => EscutarJogador(client, clientId));
+            _ = Task.Run(() => IniciarJogo(client, clientId));
         }
     }
 
-    private async Task EscutarJogador(TcpClient client, Guid clientId)
+    private async Task EscutarJogador(TcpClient client, Guid clientId, string siliba)
     {
         var stream = client.GetStream();
         var buffer = new byte[1024]; // Que tamanho usar?
@@ -63,9 +64,21 @@ public class ServidorTcpBombParty
                 Console.WriteLine($"Recebido do jogador {clientId}: {message}");
 
                 // TODO fazer alguma coisa com a mensagem
+                var db = Database.Instance;
+                var palavraExiste = db.IsWordInCache(message);
 
-                var response = Encoding.UTF8.GetBytes($"Resposta teste");
-                await stream.WriteAsync(response);
+                if (palavraExiste)
+                {
+                    var respota = Encoding.UTF8.GetBytes($"Parabens você acertou! Palavra Existente");
+                    await stream.WriteAsync(respota);
+
+                    //TODO: Chamar metodo para trocar de silaba e trocar o turno de jogador
+                }
+                else
+                {
+                    var response = Encoding.UTF8.GetBytes($"Errou, tente outra palavra");
+                    await stream.WriteAsync(response);
+                }
             }
         }
         catch (Exception ex)
@@ -78,5 +91,17 @@ public class ServidorTcpBombParty
             _jogadores.TryRemove(clientId, out _);
             Console.WriteLine($"Jogador {clientId} desconectou");
         }
+    }
+
+    public async void IniciarJogo(TcpClient client, Guid clientId)
+    {
+        if(_jogadores.Count < 1)
+        {
+            Console.WriteLine("Precisa de no minimo 2 player");
+        }
+
+        //TODO: Metodo para silabas
+        var siliba = "a";
+        await EscutarJogador(client, clientId, siliba);
     }
 }

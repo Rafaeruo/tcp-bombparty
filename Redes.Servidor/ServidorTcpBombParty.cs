@@ -11,6 +11,10 @@ public class ServidorTcpBombParty
 
     public async Task Iniciar()
     {
+        Console.WriteLine("Carregando...");
+        
+        var dictionary = new DictionaryCreator().getDictionary();
+
         var listener = new TcpListener(IPAddress.Any, 9000);
         listener.Start();
         Console.WriteLine("Ouvindo na porta 9000...");

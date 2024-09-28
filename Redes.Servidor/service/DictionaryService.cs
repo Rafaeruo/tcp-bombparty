@@ -2,7 +2,7 @@ using System.IO;
 
 namespace Redes.Servidor;
 
-public class DictionaryCreator
+public class DictionaryService
 {
     public Dictionary<String, String> getDictionary() {
         string path = @"../br-utf8.txt";

@@ -3,21 +3,30 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using Redes.Servidor.domain;
-using Redes.Servidor.helps;
+using Redes.Servidor.service;
 
 namespace Redes.Servidor;
 
 public class ServidorTcpBombParty
 {
-    private static readonly ConcurrentDictionary<Guid, TcpClient> _jogadores = new();
-    private static readonly ConcurrentDictionary<Guid, User> _usuarios = new();
+    private readonly ConcurrentDictionary<Guid, TcpClient> _jogadores = new();
+    private readonly List<Guid> _ordemJogadores = new();
+    private readonly ConcurrentDictionary<Guid, User> _usuarios = new();
+
+    private readonly HashSet<string> _palavras;
+    private string _silabaAtual = string.Empty;
+    private int _indiceJogadorAtual;
+
+    public ServidorTcpBombParty()
+    {
+        _palavras = ServicoDePalavras.Carregar();
+        ProximaSilaba();
+    }
 
     public async Task Iniciar()
     {
         Console.WriteLine("Carregando...");
         
-        var dictionary = new DictionaryService().getDictionary();
-
         var listener = new TcpListener(IPAddress.Any, 9000);
         listener.Start();
         Console.WriteLine("Ouvindo na porta 9000...");
@@ -28,57 +37,39 @@ public class ServidorTcpBombParty
             var clientId = Guid.NewGuid();
 
             _jogadores.TryAdd(clientId, client);
+            _ordemJogadores.Add(clientId);
             Console.WriteLine($"Jogador {clientId} abriu conexão");
 
-            _ = Task.Run(() => IniciarJogo(client, clientId));
+            _ = Task.Run(() => EscutarJogador(client, clientId));
         }
     }
 
-    private async Task EscutarJogador(TcpClient client, Guid clientId, string siliba)
+    private async Task EscutarJogador(TcpClient client, Guid clientId)
     {
         var stream = client.GetStream();
         var buffer = new byte[1024]; // Que tamanho usar?
 
-        // var user = new User();
-
         try
         {
-
-            var bd = await stream.ReadAsync(buffer, 0, buffer.Length);
+            var bd = await stream.ReadAsync(buffer);
             var name = Encoding.UTF8.GetString(buffer, 0, bd);
 
             _usuarios.TryAdd(clientId, new User(clientId, name));
 
             while (true)
             {
-                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                if (bytesRead == 0)
+                var bytesRead = await stream.ReadAsync(buffer);
+                var jogadorDesconectou = bytesRead == 0;
+                if (jogadorDesconectou)
                 {
-                    // Jogador desconectou
-                    _jogadores.TryRemove(clientId, out TcpClient clienteRemovido);
-                    _usuarios.TryRemove(clientId, out User userRemovido);
+                    RemoverJogador(clientId);
                     break;
                 }
 
-                var message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                Console.WriteLine($"Recebido do jogador {clientId}: {message}");
+                var mensagem = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                Console.WriteLine($"Recebido do jogador {clientId}: {mensagem}");
 
-                // TODO fazer alguma coisa com a mensagem
-                var db = Database.Instance;
-                var palavraExiste = db.IsWordInCache(message);
-
-                if (palavraExiste)
-                {
-                    var respota = Encoding.UTF8.GetBytes($"Parabens você acertou! Palavra Existente");
-                    await stream.WriteAsync(respota);
-
-                    //TODO: Chamar metodo para trocar de silaba e trocar o turno de jogador
-                }
-                else
-                {
-                    var response = Encoding.UTF8.GetBytes($"Errou, tente outra palavra");
-                    await stream.WriteAsync(response);
-                }
+                await InterpretarMensagem(mensagem);
             }
         }
         catch (Exception ex)
@@ -93,15 +84,87 @@ public class ServidorTcpBombParty
         }
     }
 
-    public async void IniciarJogo(TcpClient client, Guid clientId)
+    private void RemoverJogador(Guid clientId)
     {
-        if(_jogadores.Count < 1)
-        {
-            Console.WriteLine("Precisa de no minimo 2 player");
-        }
+        _jogadores.TryRemove(clientId, out _);
+        _usuarios.TryRemove(clientId, out _);
+        _ordemJogadores.Remove(clientId);
+    }
 
-        //TODO: Metodo para silabas
-        var siliba = "a";
-        await EscutarJogador(client, clientId, siliba);
+    private async Task  ProximoTurno()
+    {
+        ProximoJogador();
+        ProximaSilaba();
+        var mensagemProximoturno = ""; // TODO
+        await TransmitirParaTodos(mensagemProximoturno);
+    }
+
+    private void ProximaSilaba()
+    {
+        _silabaAtual = ServicoDeSilabas.ObterSilabaAleatoria(_palavras);
+    }
+
+    private void ProximoJogador()
+    {
+        if (_indiceJogadorAtual == _ordemJogadores.Count - 1)
+        {
+            _indiceJogadorAtual = 0;
+        }
+        else
+        {
+            _indiceJogadorAtual++;
+        }
+    }
+
+    private bool PalavraValida(string palavra)
+    {
+        return _palavras.Contains(palavra.ToLower());
+    }
+
+    private async Task InterpretarMensagem(string mensagem)
+    {
+        var tipoMensagem = TipoMensagemRecebida.TestarPalavra; // TODO identificar tipo de mensagem
+
+        switch (tipoMensagem)
+        {
+            case TipoMensagemRecebida.TestarPalavra:
+                await TestarPalavra(mensagem);
+                break;
+            case TipoMensagemRecebida.Digitar:
+                await DigitarPalavra(mensagem);
+                break;
+        }
+    }
+
+    public async Task TestarPalavra(string mensagem)
+    {
+        var palavra = mensagem; // TODO extrair palavra da mensagem do jogador
+        if (PalavraValida(palavra))
+        {
+            var respostaAcerto = "PALAVRA VALIDA"; // TODO montar mensagem de resposta
+            await TransmitirParaTodos(respostaAcerto);
+            await ProximoTurno();
+        }
+        else
+        {
+            var respostaErro = "PALAVRA INVALIDA"; // TODO montar mensagem de resposta
+            await TransmitirParaTodos(respostaErro);
+        }
+    }
+
+    private async Task DigitarPalavra(string mensagem)
+    {
+       // TODO enviar para todos os jogadores que a palavra digitada foi alterada
+    }
+
+    private async Task TransmitirParaTodos(string mensagem)
+    {
+        var mensagemRaw = Encoding.UTF8.GetBytes(mensagem);
+
+        foreach (var jogador in _jogadores)
+        {
+            var stream = jogador.Value.GetStream();
+            await stream.WriteAsync(mensagemRaw);
+        }
     }
 }

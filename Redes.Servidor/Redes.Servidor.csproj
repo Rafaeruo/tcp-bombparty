@@ -12,6 +12,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Redes.Common\Redes.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="br-utf8.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using Redes.Servidor.domain;
 using Redes.Servidor.service;
+using Redes.Common;
 
 namespace Redes.Servidor;
 
@@ -51,10 +52,23 @@ public class ServidorTcpBombParty
 
         try
         {
-            var bd = await stream.ReadAsync(buffer);
-            var name = Encoding.UTF8.GetString(buffer, 0, bd);
+            await stream.ReadAsync(buffer);
+            var mensagemInicial = Mensagem.From(buffer);
 
+            if (mensagemInicial.TipoMensagem != TipoMensagem.EntrarNoJogo)
+            {
+                RemoverJogador(clientId, client);
+                return;
+            }
+
+            var name = mensagemInicial.Conteudo ?? clientId.ToString();
             _usuarios.TryAdd(clientId, new User(clientId, name));
+
+            var respostaInicial = new Mensagem(TipoMensagem.RespostaEntrarNoJogo, clientId.ToString());
+            await Transmitir(client, respostaInicial);
+
+            var mensagemNovoJogador = new Mensagem(TipoMensagem.NovoJogadorEntrou, clientId + " " + name);
+            await TransmitirParaTodos(mensagemNovoJogador);
 
             while (true)
             {
@@ -62,14 +76,10 @@ public class ServidorTcpBombParty
                 var jogadorDesconectou = bytesRead == 0;
                 if (jogadorDesconectou)
                 {
-                    RemoverJogador(clientId);
                     break;
                 }
 
-                var mensagem = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                Console.WriteLine($"Recebido do jogador {clientId}: {mensagem}");
-
-                await InterpretarMensagem(mensagem);
+                await InterpretarMensagem(buffer, bytesRead);
             }
         }
         catch (Exception ex)
@@ -78,14 +88,14 @@ public class ServidorTcpBombParty
         }
         finally
         {
-            client.Close();
-            _jogadores.TryRemove(clientId, out _);
+            RemoverJogador(clientId, client);
             Console.WriteLine($"Jogador {clientId} desconectou");
         }
     }
 
-    private void RemoverJogador(Guid clientId)
+    private void RemoverJogador(Guid clientId, TcpClient client)
     {
+        client.Close();
         _jogadores.TryRemove(clientId, out _);
         _usuarios.TryRemove(clientId, out _);
         _ordemJogadores.Remove(clientId);
@@ -93,9 +103,9 @@ public class ServidorTcpBombParty
 
     private async Task  ProximoTurno()
     {
-        ProximoJogador();
+        var jogador = ProximoJogador();
         ProximaSilaba();
-        var mensagemProximoturno = ""; // TODO
+        var mensagemProximoturno = new Mensagem(TipoMensagem.ProximoTurno, $"{jogador} {_silabaAtual}");
         await TransmitirParaTodos(mensagemProximoturno);
     }
 
@@ -104,7 +114,7 @@ public class ServidorTcpBombParty
         _silabaAtual = ServicoDeSilabas.ObterSilabaAleatoria(_palavras);
     }
 
-    private void ProximoJogador()
+    private Guid ProximoJogador()
     {
         if (_indiceJogadorAtual == _ordemJogadores.Count - 1)
         {
@@ -114,6 +124,8 @@ public class ServidorTcpBombParty
         {
             _indiceJogadorAtual++;
         }
+
+        return _ordemJogadores[_indiceJogadorAtual];
     }
 
     private bool PalavraValida(string palavra)
@@ -121,50 +133,53 @@ public class ServidorTcpBombParty
         return _palavras.Contains(palavra.ToLower());
     }
 
-    private async Task InterpretarMensagem(string mensagem)
+    private async Task InterpretarMensagem(byte[] mensagemRaw, int quantidadeBytes)
     {
-        var tipoMensagem = TipoMensagemRecebida.TestarPalavra; // TODO identificar tipo de mensagem
+        var mensagem = Mensagem.From(mensagemRaw, quantidadeBytes);
 
-        switch (tipoMensagem)
+        switch (mensagem.TipoMensagem)
         {
-            case TipoMensagemRecebida.TestarPalavra:
+            case TipoMensagem.TestarPalavra:
                 await TestarPalavra(mensagem);
                 break;
-            case TipoMensagemRecebida.Digitar:
+            case TipoMensagem.Digitar:
                 await DigitarPalavra(mensagem);
                 break;
         }
     }
 
-    public async Task TestarPalavra(string mensagem)
+    public async Task TestarPalavra(Mensagem mensagem)
     {
-        var palavra = mensagem; // TODO extrair palavra da mensagem do jogador
-        if (PalavraValida(palavra))
+        var palavra = mensagem.Conteudo;
+        if (palavra is not null && PalavraValida(palavra))
         {
-            var respostaAcerto = "PALAVRA VALIDA"; // TODO montar mensagem de resposta
+            var respostaAcerto = new Mensagem(TipoMensagem.PalavraValida, null);
             await TransmitirParaTodos(respostaAcerto);
             await ProximoTurno();
         }
         else
         {
-            var respostaErro = "PALAVRA INVALIDA"; // TODO montar mensagem de resposta
+            var respostaErro = new Mensagem(TipoMensagem.PalavraInvalida, null);
             await TransmitirParaTodos(respostaErro);
         }
     }
 
-    private async Task DigitarPalavra(string mensagem)
+    private async Task DigitarPalavra(Mensagem mensagem)
     {
        // TODO enviar para todos os jogadores que a palavra digitada foi alterada
     }
 
-    private async Task TransmitirParaTodos(string mensagem)
+    private async Task TransmitirParaTodos(Mensagem mensagem)
     {
-        var mensagemRaw = Encoding.UTF8.GetBytes(mensagem);
-
         foreach (var jogador in _jogadores)
         {
-            var stream = jogador.Value.GetStream();
-            await stream.WriteAsync(mensagemRaw);
+            await Transmitir(jogador.Value, mensagem);
         }
+    }
+
+    private async Task Transmitir(TcpClient jogador, Mensagem mensagem)
+    {
+        var stream = jogador.GetStream();
+        await stream.WriteAsync(mensagem.Raw);
     }
 }

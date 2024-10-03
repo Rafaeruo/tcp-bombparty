@@ -47,7 +47,7 @@ public class ServidorTcpBombParty
     private async Task EscutarJogador(TcpClient client, Guid clientId)
     {
         var stream = client.GetStream();
-        var buffer = new byte[1024]; // Que tamanho usar?
+        var buffer = new byte[1024];
 
         try
         {

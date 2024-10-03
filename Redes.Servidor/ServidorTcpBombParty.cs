@@ -56,7 +56,6 @@ public class ServidorTcpBombParty
 
             if (mensagemInicial.TipoMensagem != TipoMensagem.EntrarNoJogo)
             {
-                RemoverJogador(clientId, client);
                 return;
             }
 
@@ -89,7 +88,7 @@ public class ServidorTcpBombParty
                     break;
                 }
 
-                await InterpretarMensagem(buffer, bytesRead);
+                await InterpretarMensagem(buffer, bytesRead, clientId);
             }
         }
         catch (Exception ex)
@@ -121,7 +120,7 @@ public class ServidorTcpBombParty
             await TransmitirParaTodos(mensagemProximoturno);
         }
         else {
-            var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_usuarios[_ganhador].name} É O GANHADOR!!");
+            var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_usuarios[_ganhador].name}");
             await TransmitirParaTodos(mensagemProximoturno);
         }
     }
@@ -182,8 +181,13 @@ public class ServidorTcpBombParty
         return palavra.Contains(_silabaAtual) && _palavras.Contains(palavra);
     }
 
-    private async Task InterpretarMensagem(byte[] mensagemRaw, int quantidadeBytes)
+    private async Task InterpretarMensagem(byte[] mensagemRaw, int quantidadeBytes, Guid clientId)
     {
+        if (clientId != JogadorAtual)
+        {
+            return;
+        }
+
         var mensagem = Mensagem.From(mensagemRaw, quantidadeBytes);
 
         switch (mensagem.TipoMensagem)

@@ -18,7 +18,8 @@ namespace Redes.Cliente
         private string _textoSendoDigitado = string.Empty;
         private bool? _respostaTentativa;
         private bool _perdeu = false;
-        private bool _ganhou = false;
+        private string? _nomeGanhador;
+        private bool JogoAcabou => !string.IsNullOrEmpty(_nomeGanhador);
 
         public async Task Iniciar(string host, int porta)
         {
@@ -43,6 +44,16 @@ namespace Redes.Cliente
 
                 AtualizarInterface();
 
+                if (JogoAcabou)
+                {
+                    return;
+                }
+
+                if (_perdeu)
+                {
+                    continue;
+                }
+
                 if (IsJogadorAtual())
                 {
                     _textoSendoDigitado = string.Empty;
@@ -52,6 +63,11 @@ namespace Redes.Cliente
                         AtualizarInterface();
                         var keyInfo = Console.ReadKey();
 
+                        if (JogoAcabou || _perdeu)
+                        {
+                            break;
+                        }
+
                         if (keyInfo.Key == ConsoleKey.Enter)
                         {
                             await Transmitir(new Mensagem(TipoMensagem.TestarPalavra, palavra.ToString()));
@@ -60,7 +76,7 @@ namespace Redes.Cliente
                             {
                             }
 
-                            if (_respostaTentativa.Value)
+                            if (_respostaTentativa.Value || _perdeu)
                             {
                                 _atualizarInterface = true;
                                 _respostaTentativa = null;
@@ -157,8 +173,6 @@ namespace Redes.Cliente
                     _respostaTentativa = false;
                     break;
                 case TipoMensagem.Ganhou:
-                    _ganhou = true;
-                    AtualizarInterface();
                     Finalizar();
                     break;
             }
@@ -188,27 +202,34 @@ namespace Redes.Cliente
 
         private void Finalizar()
         {
-            _textoSendoDigitado = _ultimaMensagem.Conteudo != null ? _ultimaMensagem.Conteudo : "" ;
+            var partes = _ultimaMensagem!.Conteudo!.Split(' ');
+            _nomeGanhador = _ultimaMensagem!.Conteudo!;
+            _atualizarInterface = true;
         }
 
         private void AtualizarInterface()
         {
             var seuTurno = IsJogadorAtual();
-            var status = _perdeu
-                ? "perdeu"
-                : _ganhou
-                    ? "ganhou"
-                    : seuTurno ? "sim" : "não";
 
             Console.Clear();
 
-            Console.WriteLine($"Última mensagem: {_ultimaMensagem?.TipoMensagem} | {_ultimaMensagem?.Conteudo}");
+            //Console.WriteLine($"Última mensagem: {_ultimaMensagem?.TipoMensagem} | {_ultimaMensagem?.Conteudo}");
             Console.WriteLine($"Você: {_nome} ({_id})");
             Console.WriteLine("Jogador atual: " + _jogadorAtual);
             Console.WriteLine("Sílaba: " + _silabaAtual);
             
-            Console.WriteLine($"Seu turno?: {status}");
+            Console.WriteLine($"Seu turno?: {seuTurno}");
             Console.WriteLine($"Texto sendo digitado: {_textoSendoDigitado}");
+
+            if (_perdeu)
+            {
+                Console.WriteLine("Você perdeu devido ao n° de tentativas errdadas!");
+            }
+
+            if (!string.IsNullOrEmpty(_nomeGanhador))
+            {
+                Console.WriteLine($"O jogador {_nomeGanhador} ganhou! A partida foi encerrada.");
+            }
 
             _atualizarInterface = false;
         }

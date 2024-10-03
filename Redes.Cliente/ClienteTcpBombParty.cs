@@ -129,9 +129,6 @@ namespace Redes.Cliente
             var mensagem = Mensagem.From(buffer, bytesRead);
             _ultimaMensagem = mensagem;
 
-            Console.WriteLine(mensagem);
-            Console.WriteLine(mensagem.TipoMensagem);
-
             switch (mensagem.TipoMensagem)
             {
                 case TipoMensagem.RespostaEntrarNoJogo:
@@ -158,12 +155,11 @@ namespace Redes.Cliente
                 case TipoMensagem.Perdeu:
                     _perdeu = true;
                     _respostaTentativa = false;
-                    ProximoTurno();
                     break;
                 case TipoMensagem.Ganhou:
                     _ganhou = true;
                     AtualizarInterface();
-                    ProximoTurno();
+                    Finalizar();
                     break;
             }
         }
@@ -192,9 +188,7 @@ namespace Redes.Cliente
 
         private void Finalizar()
         {
-            var partes = _ultimaMensagem!.Conteudo!.Split(' ');
-            _jogadorAtual = Guid.Parse(partes[0]);
-            _textoSendoDigitado = partes[1];
+            _textoSendoDigitado = _ultimaMensagem.Conteudo != null ? _ultimaMensagem.Conteudo : "" ;
         }
 
         private void AtualizarInterface()

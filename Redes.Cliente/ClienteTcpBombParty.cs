@@ -218,12 +218,12 @@ namespace Redes.Cliente
             Console.WriteLine("Jogador atual: " + _jogadorAtual);
             Console.WriteLine("Sílaba: " + _silabaAtual);
             
-            Console.WriteLine($"Seu turno?: {seuTurno}");
+            Console.WriteLine($"Seu turno?: {(seuTurno ? "Sim" : "Não")}");
             Console.WriteLine($"Texto sendo digitado: {_textoSendoDigitado}");
 
             if (_perdeu)
             {
-                Console.WriteLine("Você perdeu devido ao n° de tentativas errdadas!");
+                Console.WriteLine("Você perdeu devido ao n° de tentativas erradas!");
             }
 
             if (!string.IsNullOrEmpty(_nomeGanhador))

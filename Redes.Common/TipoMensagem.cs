@@ -11,6 +11,7 @@
         PalavraInvalida,
         ProximoTurno,
         NovoJogadorEntrou,
-        RespostaEntrarNoJogo
+        RespostaEntrarNoJogo,
+        AtualizarGameState
     }
 }

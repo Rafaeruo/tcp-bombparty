@@ -16,12 +16,12 @@ public class ServidorTcpBombParty
 
     private readonly HashSet<string> _palavras;
     private string _silabaAtual = string.Empty;
-    private int _indiceJogadorAtual;
+    private int _indiceJogadorAtual = -1;
+    private string _textoSendoDigitado = string.Empty;
 
     public ServidorTcpBombParty()
     {
         _palavras = ServicoDePalavras.Carregar();
-        ProximaSilaba();
     }
 
     public async Task Iniciar()
@@ -67,8 +67,17 @@ public class ServidorTcpBombParty
             var respostaInicial = new Mensagem(TipoMensagem.RespostaEntrarNoJogo, clientId.ToString());
             await Transmitir(client, respostaInicial);
 
+            var atualizacaoGameState = new Mensagem(TipoMensagem.AtualizarGameState, $"{JogadorAtual} {_silabaAtual} {_textoSendoDigitado}");
+            await Transmitir(client, atualizacaoGameState);
+
             var mensagemNovoJogador = new Mensagem(TipoMensagem.NovoJogadorEntrou, clientId + " " + name);
             await TransmitirParaTodos(mensagemNovoJogador);
+
+            // Inicia o jogo de fato somente quando o segundo jogador entrar
+            if (_jogadores.Count == 2)
+            {
+                await ProximoTurno();
+            }
 
             while (true)
             {
@@ -101,7 +110,7 @@ public class ServidorTcpBombParty
         _ordemJogadores.Remove(clientId);
     }
 
-    private async Task  ProximoTurno()
+    private async Task ProximoTurno()
     {
         var jogador = ProximoJogador();
         ProximaSilaba();
@@ -125,12 +134,15 @@ public class ServidorTcpBombParty
             _indiceJogadorAtual++;
         }
 
-        return _ordemJogadores[_indiceJogadorAtual];
+        return JogadorAtual;
     }
+
+    private Guid JogadorAtual => _indiceJogadorAtual >= 0 ? _ordemJogadores[_indiceJogadorAtual] : Guid.Empty;
 
     private bool PalavraValida(string palavra)
     {
-        return _palavras.Contains(palavra.ToLower());
+        palavra = palavra.ToLower().Trim(' ').Trim('\n');
+        return palavra.Contains(_silabaAtual) && _palavras.Contains(palavra);
     }
 
     private async Task InterpretarMensagem(byte[] mensagemRaw, int quantidadeBytes)
@@ -151,6 +163,7 @@ public class ServidorTcpBombParty
     public async Task TestarPalavra(Mensagem mensagem)
     {
         var palavra = mensagem.Conteudo;
+        Console.WriteLine("Testou palavra: " + palavra);
         if (palavra is not null && PalavraValida(palavra))
         {
             var respostaAcerto = new Mensagem(TipoMensagem.PalavraValida, null);
@@ -166,7 +179,9 @@ public class ServidorTcpBombParty
 
     private async Task DigitarPalavra(Mensagem mensagem)
     {
-       // TODO enviar para todos os jogadores que a palavra digitada foi alterada
+        _textoSendoDigitado = mensagem.Conteudo ?? string.Empty;
+        var atualizacaoGameState = new Mensagem(TipoMensagem.AtualizarGameState, $"{JogadorAtual} {_silabaAtual} {_textoSendoDigitado}");
+        await TransmitirParaTodos(atualizacaoGameState);
     }
 
     private async Task TransmitirParaTodos(Mensagem mensagem)

@@ -1,5 +1,6 @@
 ﻿using Redes.Common;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Redes.Cliente
 {
@@ -14,6 +15,8 @@ namespace Redes.Cliente
         private Mensagem? _ultimaMensagem;
         private Guid _jogadorAtual;
         private string? _silabaAtual;
+        private string _textoSendoDigitado = string.Empty;
+        private bool? _respostaTentativa;
 
         public async Task Iniciar(string host, int porta)
         {
@@ -37,6 +40,50 @@ namespace Redes.Cliente
                 }
 
                 AtualizarInterface();
+
+                if (IsJogadorAtual())
+                {
+                    _textoSendoDigitado = string.Empty;
+                    var palavra = new StringBuilder();
+                    while(true)
+                    {
+                        AtualizarInterface();
+                        var keyInfo = Console.ReadKey();
+
+                        if (keyInfo.Key == ConsoleKey.Enter)
+                        {
+                            await Transmitir(new Mensagem(TipoMensagem.TestarPalavra, palavra.ToString()));
+
+                            while(_respostaTentativa is null)
+                            {
+                            }
+
+                            if (_respostaTentativa.Value)
+                            {
+                                _atualizarInterface = true;
+                                _respostaTentativa = null;
+                                _jogadorAtual = Guid.Empty;
+                                break;
+                            }
+                            else
+                            {
+                                _respostaTentativa = null;
+                                continue;
+                            }
+                        }
+                        else if (keyInfo.Key == ConsoleKey.Backspace && palavra.Length >= 1)
+                        {
+                            palavra.Remove(palavra.Length - 1, 1);
+                        }
+                        else
+                        {
+                            palavra.Append(keyInfo.KeyChar.ToString());
+                        }
+
+                        _textoSendoDigitado = palavra.ToString();
+                        await Transmitir(new Mensagem(TipoMensagem.Digitar, _textoSendoDigitado));
+                    }
+                }
             }
         }
 
@@ -56,7 +103,7 @@ namespace Redes.Cliente
                         break;
                     }
 
-                    await InterpretarMensagem(buffer, bytesRead);
+                    InterpretarMensagem(buffer, bytesRead);
 
                     _atualizarInterface = true;
                 }
@@ -68,15 +115,62 @@ namespace Redes.Cliente
             }
         }
 
-        private async Task InterpretarMensagem(byte[] buffer, int bytesRead)
+        private async Task Transmitir(Mensagem mensagem)
+        {
+            var stream = _client.GetStream();
+            await stream.WriteAsync(mensagem.Raw);
+        }
+
+        private void InterpretarMensagem(byte[] buffer, int bytesRead)
         {
             var mensagem = Mensagem.From(buffer, bytesRead);
             _ultimaMensagem = mensagem;
 
-            if (mensagem.TipoMensagem == TipoMensagem.RespostaEntrarNoJogo)
+            switch (mensagem.TipoMensagem)
             {
-                _id = Guid.Parse(mensagem.Conteudo!);
+                case TipoMensagem.RespostaEntrarNoJogo:
+                    LerRespostaEntrarNoJogo();
+                    break;
+                case TipoMensagem.AtualizarGameState:
+                    LerGameState();
+                    break;
+                case TipoMensagem.ProximoTurno:
+                    ProximoTurno();
+                    break;
+                case TipoMensagem.PalavraValida:
+                    if (IsJogadorAtual())
+                    {
+                        _respostaTentativa = true;
+                    }
+                    break;
+                case TipoMensagem.PalavraInvalida:
+                    if (IsJogadorAtual())
+                    {
+                        _respostaTentativa = false;
+                    }
+                    break;
             }
+        }
+
+        private void LerRespostaEntrarNoJogo()
+        {
+            _id = Guid.Parse(_ultimaMensagem!.Conteudo!);
+        }
+
+        private void LerGameState()
+        {
+            var partes = _ultimaMensagem!.Conteudo!.Split(' ');
+            _jogadorAtual = Guid.Parse(partes[0]);
+            _silabaAtual = partes[1];
+            _textoSendoDigitado = partes[2];
+        }
+
+        private void ProximoTurno()
+        {
+            var partes = _ultimaMensagem!.Conteudo!.Split(' ');
+            _jogadorAtual = Guid.Parse(partes[0]);
+            _silabaAtual = partes[1];
+            _textoSendoDigitado = string.Empty;
         }
 
         private void AtualizarInterface()
@@ -87,10 +181,16 @@ namespace Redes.Cliente
             Console.WriteLine($"Você: {_nome} ({_id})");
             Console.WriteLine("Jogador atual: " + _jogadorAtual);
             Console.WriteLine("Sílaba: " + _silabaAtual);
-            var seuTurno = _jogadorAtual == _id && _jogadorAtual != Guid.Empty;
+            var seuTurno = IsJogadorAtual();
             Console.WriteLine($"Seu turno?: {(seuTurno ? "sim" : "não")}");
+            Console.WriteLine($"Texto sendo digitado: {_textoSendoDigitado}");
 
             _atualizarInterface = false;
+        }
+
+        private bool IsJogadorAtual()
+        {
+            return _jogadorAtual == _id && _jogadorAtual != Guid.Empty;
         }
 
         public void Dispose()

@@ -12,6 +12,8 @@
         ProximoTurno,
         NovoJogadorEntrou,
         RespostaEntrarNoJogo,
-        AtualizarGameState
+        AtualizarGameState,
+        Perdeu,
+        Ganhou
     }
 }

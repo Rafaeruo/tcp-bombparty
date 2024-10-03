@@ -19,6 +19,8 @@ public class ServidorTcpBombParty
     private int _indiceJogadorAtual = -1;
     private string _textoSendoDigitado = string.Empty;
 
+    private Guid _ganhador;
+
     public ServidorTcpBombParty()
     {
         _palavras = ServicoDePalavras.Carregar();
@@ -112,9 +114,16 @@ public class ServidorTcpBombParty
     private async Task ProximoTurno()
     {
         var jogador = ProximoJogador();
-        ProximaSilaba();
-        var mensagemProximoturno = new Mensagem(TipoMensagem.ProximoTurno, $"{jogador} {_silabaAtual}");
-        await TransmitirParaTodos(mensagemProximoturno);
+
+        if (jogador != _ganhador) {
+            ProximaSilaba();
+            var mensagemProximoturno = new Mensagem(TipoMensagem.ProximoTurno, $"{jogador} {_silabaAtual}");
+            await TransmitirParaTodos(mensagemProximoturno);
+        }
+        else {
+            var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_usuarios[_ganhador].name} É O GANHADOR!!");
+            await TransmitirParaTodos(mensagemProximoturno);
+        }
     }
 
     private void ProximaSilaba()
@@ -133,10 +142,39 @@ public class ServidorTcpBombParty
             _indiceJogadorAtual++;
         }
 
-        return JogadorAtual;
+        _ganhador = VerificaSeHaGanhador() ? PegarGanhador() : Guid.Empty;
+
+        if (_ganhador == Guid.Empty) {
+            while (VerificaSeJogadorAtualPerdeu()){
+                return ProximoJogador();
+            }
+            return JogadorAtual;
+        }
+
+        return _ganhador;
     }
 
     private Guid JogadorAtual => _indiceJogadorAtual >= 0 ? _ordemJogadores[_indiceJogadorAtual] : Guid.Empty;
+
+    private bool VerificaSeJogadorAtualPerdeu() {
+        return _usuarios[JogadorAtual].Perdeu();
+    }
+
+    private bool VerificaSeHaGanhador() {
+        var cont = 0;
+        foreach (var _usuario in _usuarios) {
+            if (!_usuario.Value.Perdeu()) cont++;
+        }
+        
+        return cont == 1;
+    }
+
+    private Guid PegarGanhador() {
+        foreach (var _usuario in _usuarios) {
+            if (!_usuario.Value.Perdeu()) return _usuario.Value.guid;
+        }
+        return Guid.Empty;
+    }
 
     private bool PalavraValida(string palavra)
     {
@@ -171,9 +209,27 @@ public class ServidorTcpBombParty
         }
         else
         {
+            Console.WriteLine(JogadorAtual);
+            var _usuarioAtual = _usuarios[JogadorAtual];
+
+            _usuarioAtual.PerdeuVida();
+            if (_usuarioAtual.Perdeu()) {
+                var respostaPerdeu = new Mensagem(TipoMensagem.Perdeu, null);
+                await Transmitir(_jogadores[JogadorAtual], respostaPerdeu);
+                await ProximoTurno();
+            }
+
+
             var respostaErro = new Mensagem(TipoMensagem.PalavraInvalida, null);
             await TransmitirParaTodos(respostaErro);
         }
+    }
+
+    private void VerificaUsuario() {
+        var _usuarioAtual = _usuarios[JogadorAtual];
+
+        _usuarioAtual.PerdeuVida();
+        if (_usuarioAtual.Perdeu()) _ordemJogadores.Remove(JogadorAtual);
     }
 
     private async Task DigitarPalavra(Mensagem mensagem)

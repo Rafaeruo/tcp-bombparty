@@ -17,6 +17,8 @@ namespace Redes.Cliente
         private string? _silabaAtual;
         private string _textoSendoDigitado = string.Empty;
         private bool? _respostaTentativa;
+        private bool _perdeu = false;
+        private bool _ganhou = false;
 
         public async Task Iniciar(string host, int porta)
         {
@@ -127,6 +129,9 @@ namespace Redes.Cliente
             var mensagem = Mensagem.From(buffer, bytesRead);
             _ultimaMensagem = mensagem;
 
+            Console.WriteLine(mensagem);
+            Console.WriteLine(mensagem.TipoMensagem);
+
             switch (mensagem.TipoMensagem)
             {
                 case TipoMensagem.RespostaEntrarNoJogo:
@@ -149,6 +154,16 @@ namespace Redes.Cliente
                     {
                         _respostaTentativa = false;
                     }
+                    break;
+                case TipoMensagem.Perdeu:
+                    _perdeu = true;
+                    _respostaTentativa = false;
+                    ProximoTurno();
+                    break;
+                case TipoMensagem.Ganhou:
+                    _ganhou = true;
+                    AtualizarInterface();
+                    ProximoTurno();
                     break;
             }
         }
@@ -175,16 +190,30 @@ namespace Redes.Cliente
             _textoSendoDigitado = string.Empty;
         }
 
+        private void Finalizar()
+        {
+            var partes = _ultimaMensagem!.Conteudo!.Split(' ');
+            _jogadorAtual = Guid.Parse(partes[0]);
+            _textoSendoDigitado = partes[1];
+        }
+
         private void AtualizarInterface()
         {
+            var seuTurno = IsJogadorAtual();
+            var status = _perdeu
+                ? "perdeu"
+                : _ganhou
+                    ? "ganhou"
+                    : seuTurno ? "sim" : "não";
+
             Console.Clear();
 
             Console.WriteLine($"Última mensagem: {_ultimaMensagem?.TipoMensagem} | {_ultimaMensagem?.Conteudo}");
             Console.WriteLine($"Você: {_nome} ({_id})");
             Console.WriteLine("Jogador atual: " + _jogadorAtual);
             Console.WriteLine("Sílaba: " + _silabaAtual);
-            var seuTurno = IsJogadorAtual();
-            Console.WriteLine($"Seu turno?: {(seuTurno ? "sim" : "não")}");
+            
+            Console.WriteLine($"Seu turno?: {status}");
             Console.WriteLine($"Texto sendo digitado: {_textoSendoDigitado}");
 
             _atualizarInterface = false;

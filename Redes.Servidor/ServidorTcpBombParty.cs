@@ -36,9 +36,6 @@ public class ServidorTcpBombParty
         {
             var client = await listener.AcceptTcpClientAsync();
             var clientId = Guid.NewGuid();
-
-            _jogadores.TryAdd(clientId, client);
-            _ordemJogadores.Add(clientId);
             Console.WriteLine($"Jogador {clientId} abriu conexão");
 
             _ = Task.Run(() => EscutarJogador(client, clientId));
@@ -63,6 +60,8 @@ public class ServidorTcpBombParty
 
             var name = mensagemInicial.Conteudo ?? clientId.ToString();
             _usuarios.TryAdd(clientId, new User(clientId, name));
+            _jogadores.TryAdd(clientId, client);
+            _ordemJogadores.Add(clientId);
 
             var respostaInicial = new Mensagem(TipoMensagem.RespostaEntrarNoJogo, clientId.ToString());
             await Transmitir(client, respostaInicial);

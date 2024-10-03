@@ -74,14 +74,15 @@ namespace Redes.Cliente
                         else if (keyInfo.Key == ConsoleKey.Backspace && palavra.Length >= 1)
                         {
                             palavra.Remove(palavra.Length - 1, 1);
+                            _textoSendoDigitado = palavra.ToString();
+                            await Transmitir(new Mensagem(TipoMensagem.Digitar, _textoSendoDigitado));
                         }
-                        else
+                        else if (!char.IsControl(keyInfo.KeyChar))
                         {
                             palavra.Append(keyInfo.KeyChar.ToString());
+                            _textoSendoDigitado = palavra.ToString();
+                            await Transmitir(new Mensagem(TipoMensagem.Digitar, _textoSendoDigitado));
                         }
-
-                        _textoSendoDigitado = palavra.ToString();
-                        await Transmitir(new Mensagem(TipoMensagem.Digitar, _textoSendoDigitado));
                     }
                 }
             }
@@ -155,6 +156,7 @@ namespace Redes.Cliente
         private void LerRespostaEntrarNoJogo()
         {
             _id = Guid.Parse(_ultimaMensagem!.Conteudo!);
+            _atualizarInterface = true;
         }
 
         private void LerGameState()

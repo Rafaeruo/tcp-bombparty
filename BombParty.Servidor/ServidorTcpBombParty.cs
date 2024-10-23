@@ -1,14 +1,13 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Net;
-using System.Text;
-using Redes.Servidor.domain;
-using Redes.Servidor.service;
-using Redes.Common;
+using BombParty.Common;
+using BombParty.Servidor.service;
+using BombParty.Servidor.domain;
 
-namespace Redes.Servidor;
+namespace BombParty.Servidor;
 
-public class ServidorTcpBombParty
+public sealed class ServidorTcpBombParty : IDisposable
 {
     private readonly ConcurrentDictionary<Guid, TcpClient> _jogadores = new();
     private readonly List<Guid> _ordemJogadores = new();
@@ -29,7 +28,7 @@ public class ServidorTcpBombParty
     public async Task Iniciar()
     {
         Console.WriteLine("Carregando...");
-        
+
         var listener = new TcpListener(IPAddress.Any, 9000);
         listener.Start();
         Console.WriteLine("Ouvindo na porta 9000...");
@@ -114,12 +113,14 @@ public class ServidorTcpBombParty
     {
         var jogador = ProximoJogador();
 
-        if (jogador != _ganhador) {
+        if (jogador != _ganhador)
+        {
             ProximaSilaba();
             var mensagemProximoturno = new Mensagem(TipoMensagem.ProximoTurno, $"{jogador} {_silabaAtual}");
             await TransmitirParaTodos(mensagemProximoturno);
         }
-        else {
+        else
+        {
             var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_usuarios[_ganhador].name}");
             await TransmitirParaTodos(mensagemProximoturno);
         }
@@ -143,8 +144,10 @@ public class ServidorTcpBombParty
 
         _ganhador = VerificaSeHaGanhador() ? PegarGanhador() : Guid.Empty;
 
-        if (_ganhador == Guid.Empty) {
-            while (VerificaSeJogadorAtualPerdeu()){
+        if (_ganhador == Guid.Empty)
+        {
+            while (VerificaSeJogadorAtualPerdeu())
+            {
                 return ProximoJogador();
             }
             return JogadorAtual;
@@ -155,21 +158,26 @@ public class ServidorTcpBombParty
 
     private Guid JogadorAtual => _indiceJogadorAtual >= 0 ? _ordemJogadores[_indiceJogadorAtual] : Guid.Empty;
 
-    private bool VerificaSeJogadorAtualPerdeu() {
+    private bool VerificaSeJogadorAtualPerdeu()
+    {
         return _usuarios[JogadorAtual].Perdeu();
     }
 
-    private bool VerificaSeHaGanhador() {
+    private bool VerificaSeHaGanhador()
+    {
         var cont = 0;
-        foreach (var _usuario in _usuarios) {
+        foreach (var _usuario in _usuarios)
+        {
             if (!_usuario.Value.Perdeu()) cont++;
         }
-        
+
         return cont == 1;
     }
 
-    private Guid PegarGanhador() {
-        foreach (var _usuario in _usuarios) {
+    private Guid PegarGanhador()
+    {
+        foreach (var _usuario in _usuarios)
+        {
             if (!_usuario.Value.Perdeu()) return _usuario.Value.guid;
         }
         return Guid.Empty;
@@ -217,7 +225,8 @@ public class ServidorTcpBombParty
             var _usuarioAtual = _usuarios[JogadorAtual];
 
             _usuarioAtual.PerdeuVida();
-            if (_usuarioAtual.Perdeu()) {
+            if (_usuarioAtual.Perdeu())
+            {
                 var respostaPerdeu = new Mensagem(TipoMensagem.Perdeu, null);
                 await Transmitir(_jogadores[JogadorAtual], respostaPerdeu);
                 await ProximoTurno();
@@ -229,7 +238,8 @@ public class ServidorTcpBombParty
         }
     }
 
-    private void VerificaUsuario() {
+    private void VerificaUsuario()
+    {
         var _usuarioAtual = _usuarios[JogadorAtual];
 
         _usuarioAtual.PerdeuVida();
@@ -255,5 +265,13 @@ public class ServidorTcpBombParty
     {
         var stream = jogador.GetStream();
         await stream.WriteAsync(mensagem.Raw);
+    }
+
+    public void Dispose()
+    {
+        foreach (var tcpClient in _jogadores.Values)
+        {
+            tcpClient.Close();
+        }
     }
 }

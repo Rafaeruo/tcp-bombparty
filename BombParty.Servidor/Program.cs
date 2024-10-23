@@ -1,4 +1,4 @@
-﻿using Redes.Servidor;
+﻿using BombParty.Servidor;
 
 var servidor = new ServidorTcpBombParty();
 

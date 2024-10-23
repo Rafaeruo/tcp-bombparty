@@ -1,10 +1,10 @@
-﻿using Redes.Common;
+﻿using BombParty.Common;
 using System.Net.Sockets;
 using System.Text;
 
-namespace Redes.Cliente
+namespace BombParty.Cliente
 {
-    public class ClienteTcpBombParty : IDisposable
+    public sealed class ClienteTcpBombParty : IDisposable
     {
         private readonly TcpClient _client = new();
         private bool _conectado;
@@ -58,7 +58,7 @@ namespace Redes.Cliente
                 {
                     _textoSendoDigitado = string.Empty;
                     var palavra = new StringBuilder();
-                    while(true)
+                    while (true)
                     {
                         AtualizarInterface();
                         var keyInfo = Console.ReadKey();
@@ -72,7 +72,7 @@ namespace Redes.Cliente
                         {
                             await Transmitir(new Mensagem(TipoMensagem.TestarPalavra, palavra.ToString()));
 
-                            while(_respostaTentativa is null)
+                            while (_respostaTentativa is null)
                             {
                             }
 
@@ -217,7 +217,7 @@ namespace Redes.Cliente
             Console.WriteLine($"Você: {_nome} ({_id})");
             Console.WriteLine("Jogador atual: " + _jogadorAtual);
             Console.WriteLine("Sílaba: " + _silabaAtual);
-            
+
             Console.WriteLine($"Seu turno?: {(seuTurno ? "Sim" : "Não")}");
             Console.WriteLine($"Texto sendo digitado: {_textoSendoDigitado}");
 

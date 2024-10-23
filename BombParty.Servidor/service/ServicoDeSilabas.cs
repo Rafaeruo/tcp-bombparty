@@ -1,4 +1,4 @@
-﻿namespace Redes.Servidor.service
+﻿namespace BombParty.Servidor.service
 {
     public static class ServicoDeSilabas
     {

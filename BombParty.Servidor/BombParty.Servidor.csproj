@@ -12,13 +12,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Redes.Common\Redes.Common.csproj" />
+    <ProjectReference Include="../BombParty.Common/BombParty.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="br-utf8.txt">
+    <None Update="palavras.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="domain\" />
   </ItemGroup>
 
 </Project>

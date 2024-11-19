@@ -1,15 +1,13 @@
-using System.IO;
+namespace BombParty.Servidor;
 
-namespace Redes.Servidor;
-
-public static class ServicoDePalavras
+public static class Palavras
 {
-    public static HashSet<string> Carregar() 
+    public static HashSet<string> Carregar()
     {
-        const string path = "./br-utf8.txt";
+        const string path = "./palavras.txt";
         var palavras = new HashSet<string>();
 
-        using var  sr = new StreamReader(path);
+        using var sr = new StreamReader(path);
         string? linha;
 
         while ((linha = sr.ReadLine()) != null)

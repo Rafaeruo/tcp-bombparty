@@ -1,6 +1,6 @@
-﻿namespace Redes.Servidor.service
+﻿namespace BombParty.Servidor
 {
-    public static class ServicoDeSilabas
+    public static class Silabas
     {
         public static string ObterSilabaAleatoria(IEnumerable<string> palavras)
         {

@@ -1,4 +1,4 @@
-﻿namespace Redes.Common
+﻿namespace BombParty.Common
 {
     public enum TipoMensagem
     {

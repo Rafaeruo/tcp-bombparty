@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Redes.Common\Redes.Common.csproj" />
+    <ProjectReference Include="../BombParty.Common/BombParty.Common.csproj" />
   </ItemGroup>
 
 </Project>

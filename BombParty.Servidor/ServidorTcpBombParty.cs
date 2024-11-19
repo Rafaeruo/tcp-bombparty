@@ -1,18 +1,15 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Net;
-using System.Text;
-using Redes.Servidor.domain;
-using Redes.Servidor.service;
-using Redes.Common;
+using BombParty.Common;
 
-namespace Redes.Servidor;
+namespace BombParty.Servidor;
 
-public class ServidorTcpBombParty
+public sealed class ServidorTcpBombParty : IDisposable
 {
-    private readonly ConcurrentDictionary<Guid, TcpClient> _jogadores = new();
+    private readonly ConcurrentDictionary<Guid, TcpClient> _conexoes = new();
     private readonly List<Guid> _ordemJogadores = new();
-    private readonly ConcurrentDictionary<Guid, User> _usuarios = new();
+    private readonly ConcurrentDictionary<Guid, Jogador> _jogadores = new();
 
     private readonly HashSet<string> _palavras;
     private string _silabaAtual = string.Empty;
@@ -23,13 +20,13 @@ public class ServidorTcpBombParty
 
     public ServidorTcpBombParty()
     {
-        _palavras = ServicoDePalavras.Carregar();
+        _palavras = Palavras.Carregar();
     }
 
     public async Task Iniciar()
     {
         Console.WriteLine("Carregando...");
-        
+
         var listener = new TcpListener(IPAddress.Any, 9000);
         listener.Start();
         Console.WriteLine("Ouvindo na porta 9000...");
@@ -60,8 +57,8 @@ public class ServidorTcpBombParty
             }
 
             var name = mensagemInicial.Conteudo ?? clientId.ToString();
-            _usuarios.TryAdd(clientId, new User(clientId, name));
-            _jogadores.TryAdd(clientId, client);
+            _jogadores.TryAdd(clientId, new Jogador(clientId, name));
+            _conexoes.TryAdd(clientId, client);
             _ordemJogadores.Add(clientId);
 
             var respostaInicial = new Mensagem(TipoMensagem.RespostaEntrarNoJogo, clientId.ToString());
@@ -74,7 +71,7 @@ public class ServidorTcpBombParty
             await TransmitirParaTodos(mensagemNovoJogador);
 
             // Inicia o jogo de fato somente quando o segundo jogador entrar
-            if (_jogadores.Count == 2)
+            if (_conexoes.Count == 2)
             {
                 await ProximoTurno();
             }
@@ -105,8 +102,8 @@ public class ServidorTcpBombParty
     private void RemoverJogador(Guid clientId, TcpClient client)
     {
         client.Close();
+        _conexoes.TryRemove(clientId, out _);
         _jogadores.TryRemove(clientId, out _);
-        _usuarios.TryRemove(clientId, out _);
         _ordemJogadores.Remove(clientId);
     }
 
@@ -114,20 +111,22 @@ public class ServidorTcpBombParty
     {
         var jogador = ProximoJogador();
 
-        if (jogador != _ganhador) {
+        if (jogador != _ganhador)
+        {
             ProximaSilaba();
             var mensagemProximoturno = new Mensagem(TipoMensagem.ProximoTurno, $"{jogador} {_silabaAtual}");
             await TransmitirParaTodos(mensagemProximoturno);
         }
-        else {
-            var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_usuarios[_ganhador].name}");
+        else
+        {
+            var mensagemProximoturno = new Mensagem(TipoMensagem.Ganhou, $"{_jogadores[_ganhador].Nome}");
             await TransmitirParaTodos(mensagemProximoturno);
         }
     }
 
     private void ProximaSilaba()
     {
-        _silabaAtual = ServicoDeSilabas.ObterSilabaAleatoria(_palavras);
+        _silabaAtual = Silabas.ObterSilabaAleatoria(_palavras);
     }
 
     private Guid ProximoJogador()
@@ -141,12 +140,16 @@ public class ServidorTcpBombParty
             _indiceJogadorAtual++;
         }
 
-        _ganhador = VerificaSeHaGanhador() ? PegarGanhador() : Guid.Empty;
+        _ganhador = ObterGanhador();
 
-        if (_ganhador == Guid.Empty) {
-            while (VerificaSeJogadorAtualPerdeu()){
+        var naoHaGanhador = _ganhador == Guid.Empty;
+        if (naoHaGanhador)
+        {
+            while (_jogadores[JogadorAtual].Perdeu)
+            {
                 return ProximoJogador();
             }
+
             return JogadorAtual;
         }
 
@@ -155,23 +158,15 @@ public class ServidorTcpBombParty
 
     private Guid JogadorAtual => _indiceJogadorAtual >= 0 ? _ordemJogadores[_indiceJogadorAtual] : Guid.Empty;
 
-    private bool VerificaSeJogadorAtualPerdeu() {
-        return _usuarios[JogadorAtual].Perdeu();
-    }
+    private Guid ObterGanhador()
+    {
+        var aindaNaoPerderam = _jogadores.Where(u => !u.Value.Perdeu);
 
-    private bool VerificaSeHaGanhador() {
-        var cont = 0;
-        foreach (var _usuario in _usuarios) {
-            if (!_usuario.Value.Perdeu()) cont++;
+        if (aindaNaoPerderam.Count() == 1)
+        {
+            return aindaNaoPerderam.First().Key;
         }
-        
-        return cont == 1;
-    }
 
-    private Guid PegarGanhador() {
-        foreach (var _usuario in _usuarios) {
-            if (!_usuario.Value.Perdeu()) return _usuario.Value.guid;
-        }
         return Guid.Empty;
     }
 
@@ -214,12 +209,13 @@ public class ServidorTcpBombParty
         else
         {
             Console.WriteLine(JogadorAtual);
-            var _usuarioAtual = _usuarios[JogadorAtual];
+            var jogadorAtual = _jogadores[JogadorAtual];
 
-            _usuarioAtual.PerdeuVida();
-            if (_usuarioAtual.Perdeu()) {
+            jogadorAtual.PerderVida();
+            if (jogadorAtual.Perdeu)
+            {
                 var respostaPerdeu = new Mensagem(TipoMensagem.Perdeu, null);
-                await Transmitir(_jogadores[JogadorAtual], respostaPerdeu);
+                await Transmitir(_conexoes[JogadorAtual], respostaPerdeu);
                 await ProximoTurno();
             }
 
@@ -227,13 +223,6 @@ public class ServidorTcpBombParty
             var respostaErro = new Mensagem(TipoMensagem.PalavraInvalida, null);
             await TransmitirParaTodos(respostaErro);
         }
-    }
-
-    private void VerificaUsuario() {
-        var _usuarioAtual = _usuarios[JogadorAtual];
-
-        _usuarioAtual.PerdeuVida();
-        if (_usuarioAtual.Perdeu()) _ordemJogadores.Remove(JogadorAtual);
     }
 
     private async Task DigitarPalavra(Mensagem mensagem)
@@ -245,9 +234,9 @@ public class ServidorTcpBombParty
 
     private async Task TransmitirParaTodos(Mensagem mensagem)
     {
-        foreach (var jogador in _jogadores)
+        foreach (var conexaoJogador in _conexoes)
         {
-            await Transmitir(jogador.Value, mensagem);
+            await Transmitir(conexaoJogador.Value, mensagem);
         }
     }
 
@@ -255,5 +244,13 @@ public class ServidorTcpBombParty
     {
         var stream = jogador.GetStream();
         await stream.WriteAsync(mensagem.Raw);
+    }
+
+    public void Dispose()
+    {
+        foreach (var tcpClient in _conexoes.Values)
+        {
+            tcpClient.Close();
+        }
     }
 }

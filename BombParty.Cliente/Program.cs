@@ -1,4 +1,4 @@
-﻿using Redes.Cliente;
+﻿using BombParty.Cliente;
 
 using var cliente = new ClienteTcpBombParty();
 
